@@ -6,106 +6,78 @@
 # copyright : 2013 Interlogy, LLC.
 # link : http://www.jotform.com
 # version : 1.0
-# package : JotFormAPI 
+# package : JotFormAPI
 
-import urllib
-import urllib2
+from urllib.parse import urljoin, urlparse
+import requests
 import json
-from xml.dom.minidom import parseString
+import logging
+import pathlib
 
-class JotformAPIClient:
-    __baseUrl = 'https://api.jotform.com/'
-    __apiVersion = 'v1'
 
-    __apiKey = None
-    __debugMode = False
-    __outputType = "json"
-    
-    def __init__(self, apiKey='', outputType='json', debug=False):
+logger = logging.getLogger('spam_application')
+logger.setLevel(logging.DEBUG)
 
-        self.__apiKey = apiKey
-        self.__debugMode = debug
-        self.__outputType = outputType.lower()
 
-    def _log(self, message):
-        if self.__debugMode:
-            print message
+class JotformAPIClient(object):
+    base_url = 'https://api.jotform.com/'
+    api_version = 'v1'
 
-    def set_baseurl(self, baseurl):
-        self.__baseUrl = baseurl
+    def __init__(self, api_key='', debug=False):
+        self.api_key = api_key
+        self.debug_mode = debug
 
-    def get_debugMode(self):
-        return self.__debugMode
-    def set_debugMode(self, value):
-        self.__debugMode = value
-
-    def get_outputType(self):
-        return self.__outputType
-    def set_outputType(self, value):
-        self.__outputType = value
+    def log(self, message):
+        if self.debug_mode:
+            logger.debug(message)
 
     def fetch_url(self, url, params=None, method=None):
-        if(self.__outputType != 'json'):
-            url = url + '.xml'
+        versioned = urljoin(self.base_url, self.api_version)
+        endpoint = str(pathlib.Path(url).with_suffix('.json'))
+        url = urljoin(versioned, endpoint)
 
-        url = self.__baseUrl + self.__apiVersion + url
+        self.log('fetching url ' + url)
 
-        self._log('fetching url ' + url)
-        if (params):
-            self._log(params)
+        if params:
+            self.log(params)
 
         headers = {
-            'apiKey': self.__apiKey
+            'apiKey': self.api_key
         }
 
-        if (method == 'GET'):
-            if (params):
-                url = url + '?' + urllib.urlencode(params)
+        resp = requests.request(method=method, url=url,
+            headers=headers, params=params)
 
-            req = urllib2.Request(url, headers=headers, data=None)
-        elif (method == 'POST'):
-            if (params):
-                data = urllib.urlencode(params)
-            else:
-                data = None
-            req = urllib2.Request(url, headers=headers, data=data)
-        elif (method == 'DELETE'):
-            req = urllib2.Request(url, headers=headers, data=None)
-            req.get_method = lambda: 'DELETE'
-        elif (method == 'PUT'):
-            req = urllib2.Request(url, headers=headers, data=params)
-            req.get_method = lambda: 'PUT'
+        json_response = resp.json()
+        return json_response.get('content')
 
-        response = urllib2.urlopen(req)
+    @staticmethod
+    def create_conditions(offset, limit, filters, order_by):
 
-        if (self.__outputType == 'json'):
-            responseObject = json.loads(response.read())
-            return responseObject['content']
-        else:
-            data = response.read()
-            response.close()
-            return data
+        kwargs = {
+            'offset': offset,
+            'limit': limit,
+            'orderby': order_by
+        }
 
-    def create_conditions(self, offset, limit, filterArray, order_by):
-        args = {'offset': offset, 'limit': limit, 'filter': filterArray, 'orderby': order_by}
-        params = {}
+        params = {k: v for k, v in kwargs.items() if k}
 
-        for key in args.keys():
-            if(args[key]):
-                if(key == 'filter'):
-                    params[key] = json.dumps(args[key])
-                else:
-                    params[key] = args[key]
+        if filters:
+            params.update({'filter': json.dumps(filters)})
 
         return params
 
-    def create_history_query(self, action, date, sortBy, startDate, endDate):
-        args = {'action': action, 'date': date, 'sortBy': sortBy, 'startDate': startDate, 'endDate': endDate}
-        params = {}
+    @staticmethod
+    def create_history_query(action, date, sort_by, start_date, end_date):
+        kwargs = {
+            'action': action,
+            'date': date,
+            'sort_by': sort_by,
+            'startDate': start_date,
+            'endDate': end_date
+        }
 
-        for key in args.keys():
-            if (args[key]):
-                params[key] = args[key]
+        params = {k: v for k, v in kwargs.items() if k}
 
         return params
 
@@ -124,41 +96,41 @@ class JotformAPIClient:
         Returns:
             Number of submissions, number of SSL form submissions, payment form submissions and upload space used by user.
         """
-        
+
         return self.fetch_url('/user/usage', method='GET')
 
-    def get_forms(self, offset=None, limit=None, filterArray=None, order_by=None):
+    def get_forms(self, offset=None, limit=None, filters=None, order_by=None):
         """Get a list of forms for this account
 
         Args:
             offset (string): Start of each result set for form list. (optional)
             limit (string): Number of results in each result set for form list. (optional)
-            filterArray (array): Filters the query results to fetch a specific form range.(optional)
+            filters (array): Filters the query results to fetch a specific form range.(optional)
             order_by (string): Order results by a form field name. (optional)
 
         Returns:
             Basic details such as title of the form, when it was created, number of new and total submissions.
         """
 
-        params = self.create_conditions(offset, limit, filterArray, order_by)
+        params = self.create_conditions(offset, limit, filters, order_by)
 
         return self.fetch_url('/user/forms', params, 'GET')
 
-    def get_submissions(self, offset=None, limit=None, filterArray=None, order_by=None):
+    def get_submissions(self, offset=None, limit=None, filters=None, order_by=None):
         """Get a list of submissions for this account.
 
         Args:
             offset (string): Start of each result set for form list. (optional)
             limit (string): Number of results in each result set for form list. (optional)
-            filterArray (array): Filters the query results to fetch a specific form range.(optional)
+            filters (array): Filters the query results to fetch a specific form range.(optional)
             order_by (string): Order results by a form field name. (optional)
 
         Returns:
             Basic details such as title of the form, when it was created, number of new and total submissions.
         """
 
-        params = self.create_conditions(offset, limit, filterArray, order_by)
-            
+        params = self.create_conditions(offset, limit, filters, order_by)
+
         return self.fetch_url('/user/submissions', params, 'GET')
 
     def get_subusers(self):
@@ -194,7 +166,7 @@ class JotformAPIClient:
         Returns:
             User's time zone and language.
         """
-        
+
         return self.fetch_url('/user/settings', method='GET')
 
     def update_settings(self, settings):
@@ -209,49 +181,50 @@ class JotformAPIClient:
 
         return self.fetch_url('/user/settings', settings, 'POST')
 
-    def get_history(self, action=None, date=None, sortBy=None, startDate=None, endDate=None):
+    def get_history(self, action=None, date=None, sort_by=None,
+                    start_date=None, end_date=None):
         """Get user activity log.
 
-        Args: 
+        Args:
             action (enum): Filter results by activity performed. Default is 'all'.
             date (enum): Limit results by a date range. If you'd like to limit results by specific dates you can use startDate and endDate fields instead.
-            sortBy (enum): Lists results by ascending and descending order.
-            startDate (string): Limit results to only after a specific date. Format: MM/DD/YYYY.
-            endDate (string): Limit results to only before a specific date. Format: MM/DD/YYYY.
+            sort_by (enum): Lists results by ascending and descending order.
+            start_date (string): Limit results to only after a specific date. Format: MM/DD/YYYY.
+            end_date (string): Limit results to only before a specific date. Format: MM/DD/YYYY.
 
         Returns:
             Activity log about things like forms created/modified/deleted, account logins and other operations.
         """
 
-        params = self.create_history_query(action, date, sortBy, startDate, endDate)
+        params = self.create_history_query(action, date, sort_by, start_date, end_date)
 
         return self.fetch_url('/user/history', params, 'GET')
 
-    def get_form(self, formID):
+    def get_form(self, id):
         """Get basic information about a form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             Form ID, status, update and creation dates, submission count etc.
         """
 
-        return self.fetch_url('/form/' + formID, method='GET')
+        return self.fetch_url('/form/' + id, method='GET')
 
-    def get_form_questions(self, formID):
+    def get_form_questions(self, id):
         """Get a list of all questions on a form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             Question properties of a form.
         """
 
-        return self.fetch_url('/form/' + formID + '/questions', method='GET')
+        return self.fetch_url('/form/' + id + '/questions', method='GET')
 
-    def get_form_question(self, formID,  qid):
+    def get_form_question(self, id, qid):
         """Get details about a question
 
         Args:
@@ -261,32 +234,33 @@ class JotformAPIClient:
         Returns:
             Question properties like required and validation.
         """
-        return self.fetch_url('/form/' + formID + '/question/' + qid, method='GET')
+        return self.fetch_url('/form/' + id + '/question/' + qid, method='GET')
 
-    def get_form_submissions(self, formID, offset=None, limit=None, filterArray=None, order_by=None):
+    def get_form_submissions(self, id, offset=None, limit=None,
+                             filters=None, order_by=None):
         """List of a form submissions.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             offset (string): Start of each result set for form list. (optional)
             limit (string): Number of results in each result set for form list. (optional)
-            filterArray (array): Filters the query results to fetch a specific form range.(optional)
+            filters (array): Filters the query results to fetch a specific form range.(optional)
             order_by (string): Order results by a form field name. (optional)
 
         Returns:
             Submissions of a specific form.
         """
 
-        params = self.create_conditions(offset, limit, filterArray, order_by)
+        params = self.create_conditions(offset, limit, filters, order_by)
 
-        return self.fetch_url('/form/' + formID + '/submissions', params, 'GET')
+        return self.fetch_url('/form/' + id + '/submissions', params, 'GET')
 
-    def create_form_submission(self, formID, submission):
+    def create_form_submission(self, id, submission):
         """Submit data to this form using the API.
 
-        Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
-            submission (array): Submission data with question IDs.
+        Args: id (string): Form ID is the numbers you see on a form URL. You
+        can get form IDs when you call /user/forms. submission (array):
+        Submission data with question IDs.
 
         Returns:
             Posted submission ID and URL.
@@ -294,26 +268,27 @@ class JotformAPIClient:
 
         sub = {}
 
-        for key in submission.keys():
+        for key in submission:
             if "_" in key:
                 sub['submission[' + key[0:key.find("_")] + '][' + key[key.find("_")+1:len(key)] + ']'] = submission[key]
             else:
                 sub['submission[' + key + ']'] = submission[key]
 
-        return self.fetch_url('/form/' + formID + '/submissions', sub, 'POST')
+        return self.fetch_url('/form/' + id + '/submissions', sub, 'POST')
 
-    def create_form_submissions(self, formID, submissions):
+    def create_form_submissions(self, id, submissions):
         """Submit data to this form using the API.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
-            submission (json): Submission data with question IDs.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            submissions (json): Submission data with question IDs.
 
         Returns:
             Posted submission ID and URL.
         """
 
-        return self.fetch_url('/form/' + formID + '/submissions', submissions, 'PUT')
+        return self.fetch_url('/form/' + id + '/submissions',
+            submissions, 'PUT')
 
     def get_form_files(self, formID):
         """List of files uploaded on a form.
@@ -327,45 +302,45 @@ class JotformAPIClient:
 
         return self.fetch_url('/form/' + formID + '/files', method='GET')
 
-    def get_form_webhooks(self, formID):
+    def get_form_webhooks(self, id):
         """Get list of webhooks for a form
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             List of webhooks for a specific form.
         """
 
-        return self.fetch_url('/form/' + formID + '/webhooks', method='GET')
+        return self.fetch_url('/form/' + id + '/webhooks', method='GET')
 
-    def create_form_webhook(self, formID, webhookURL):
+    def create_form_webhook(self, id, webhook_url):
         """Add a new webhook
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
-            webhookURL (string): Webhook URL is where form data will be posted when form is submitted. 
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            webhook_url (string): Webhook URL is where form data will be posted when form is submitted.
 
         Returns:
             List of webhooks for a specific form.
         """
 
-        params = {'webhookURL': webhookURL}
+        params = {'webhookURL': webhook_url}
 
-        return self.fetch_url('/form/' + formID + '/webhooks', params, 'POST')
+        return self.fetch_url('/form/' + id + '/webhooks', params, 'POST')
 
-    def delete_form_webhook(self, formID, webhookID):
+    def delete_form_webhook(self, id, webhook_id):
         """Delete a specific webhook of a form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
-            webhookID (string): You can get webhook IDs when you call /form/{formID}/webhooks.
+            id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            webhook_id (string): You can get webhook IDs when you call /form/{formID}/webhooks.
 
         Returns:
             Remaining webhook URLs of form.
         """
 
-        return self.fetch_url('/form/' + formID + '/webhooks/' + webhookID, None, 'DELETE')
+        return self.fetch_url('/form/' + id + '/webhooks/' + webhook_id, None, 'DELETE')
 
     def get_submission(self, sid):
         """Get submission data
@@ -379,78 +354,80 @@ class JotformAPIClient:
 
         return self.fetch_url('/submission/' + sid, method='GET')
 
-    def get_report(self, reportID):
+    def get_report(self, report_id):
         """Get report details
 
         Args:
-            reportID (string): You can get a list of reports from /user/reports.
+            report_id (string): You can get a list of reports from /user/reports.
 
         Returns:
             Properties of a speceific report like fields and status.
         """
 
-        return self.fetch_url('/report/' + reportID, method='GET')
+        return self.fetch_url('/report/' + report_id, method='GET')
 
-    def get_folder(self, folderID):
+    def get_folder(self, folder_id):
         """Get folder details
 
         Args:
-            folderID (string): Get a list of folders from /user/folders
+            folder_id (string): Get a list of folders from /user/folders
 
         Returns:
             A list of forms in a folder, and other details about the form such as folder color.
         """
 
-        return self.fetch_url('/folder/' + folderID, method='GET')
+        return self.fetch_url('/folder/' + folder_id, method='GET')
 
-    def get_form_properties(self, formID):
+    def get_form_properties(self, form_id):
         """Get a list of all properties on a form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             Form properties like width, expiration date, style etc.
         """
 
-        return self.fetch_url('/form/' + formID + '/properties', method='GET')
+        return self.fetch_url('/form/' + form_id + '/properties', method='GET')
 
-    def get_form_property(self, formID, propertyKey):
+    def get_form_property(self, form_id, property_key):
         """Get a specific property of the form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
-            propertyKey (string): You can get property keys when you call /form/{id}/properties.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            property_key (string): You can get property keys when you call /form/{id}/properties.
 
         Returns:
             Given property key value.
         """
 
-        return self.fetch_url('/form/' + formID + '/properties/' + propertyKey, method='GET')
+        return self.fetch_url(
+            '/form/' + form_id + '/properties/' + property_key, method='GET'
+        )
 
-    def get_form_reports(self, formID):
+    def get_form_reports(self, form_id):
         """Get all the reports of a form, such as excel, csv, grid, html, etc.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             List of all reports in a form, and other details about the reports such as title.
         """
 
-        return self.fetch_url('/form/' + formID + '/reports', method='GET')
+        return self.fetch_url('/form/' + form_id + '/reports', method='GET')
 
-    def create_report(self, formID, report):
+    def create_report(self, form_id, report):
         """Create new report of a form
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             report (array): Report details. List type, title etc.
 
         Returns:
             Report details and URL
         """
-        return self.fetch_url('/form/' + formID + '/reports', report, 'POST')
+        return self.fetch_url('/form/' + form_id + '/reports', report, 'POST')
 
     def delete_submission(self, sid):
         """Delete a single submission.
@@ -477,45 +454,47 @@ class JotformAPIClient:
 
         sub = {}
 
-        for key in submission.keys():
+        for key in submission:
             if '_' in key and key != "created_at":
                 sub['submission[' + key[0:key.find('_')] + '][' + key[key.find('_')+1:len(key)] + ']'] = submission[key]
             else:
                 sub['submission[' + key + ']'] = submission[key]
-               
+
         return self.fetch_url('/submission/' + sid, sub, 'POST')
 
-    def clone_form(self, formID):
+    def clone_form(self, form_id):
         """Clone a single form.
-        
+
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             Status of request.
         """
         params = {"method": "post"}
-        
-        return self.fetch_url('/form/' + formID + '/clone', params, 'POST')
 
-    def delete_form_question(self, formID, qid):
+        return self.fetch_url('/form/' + form_id + '/clone', params, 'POST')
+
+    def delete_form_question(self, form_id, qid):
         """Delete a single form question.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             qid (string): Identifier for each question on a form. You can get a list of question IDs from /form/{id}/questions.
 
         Returns:
             Status of request.
         """
 
-        return self.fetch_url('/form/' + formID + '/question/' + qid, None, 'DELETE')
+        return self.fetch_url(
+            '/form/' + form_id + '/question/' + qid, None, 'DELETE'
+        )
 
-    def create_form_question(self, formID, question):
+    def create_form_question(self, form_id, question):
         """Add new question to specified form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             question (array): New question properties like type and text.
 
         Returns:
@@ -523,29 +502,29 @@ class JotformAPIClient:
         """
         params = {}
 
-        for key in question.keys():
+        for key in question:
             params['question[' + key + ']'] = question[key]
 
-        return self.fetch_url('/form/' + formID + '/questions', params, 'POST')
+        return self.fetch_url('/form/' + form_id + '/questions', params, 'POST')
 
-    def create_form_questions(self, formID, questions):
+    def create_form_questions(self, form_id, questions):
         """Add new questions to specified form.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             questions (json): New question properties like type and text.
 
         Returns:
             Properties of new question.
         """
 
-        return self.fetch_url('/form/' + formID + '/questions', questions, 'PUT')
+        return self.fetch_url('/form/' + form_id + '/questions', questions, 'PUT')
 
-    def edit_form_question(self, formID, qid, question_properties):
+    def edit_form_question(self, form_id, qid, question_properties):
         """Add or edit a single question properties.
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             qid (string): Identifier for each question on a form. You can get a list of question IDs from /form/{id}/questions.
             question_properties (array): New question properties like type and text.
 
@@ -554,16 +533,16 @@ class JotformAPIClient:
         """
         question = {}
 
-        for key in question_properties.keys():
+        for key in question_properties:
             question['question[' + key + ']'] = question_properties[key]
 
-        return self.fetch_url('/form/' + formID + '/question/' + qid, question, 'POST')
+        return self.fetch_url('/form/' + form_id + '/question/' + qid, question, 'POST')
 
-    def set_form_properties(self, formID, form_properties):
+    def set_form_properties(self, form_id, form_properties):
         """Add or edit properties of a specific form
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             form_properties (array): New properties like label width.
 
         Returns:
@@ -571,23 +550,23 @@ class JotformAPIClient:
         """
         properties = {}
 
-        for key in form_properties.keys():
+        for key in form_properties:
             properties['properties[' + key + ']'] = form_properties[key]
 
-        return self.fetch_url('/form/' + formID + '/properties', properties, 'POST')
+        return self.fetch_url('/form/' + form_id + '/properties', properties, 'POST')
 
-    def set_multiple_form_properties(self, formID, form_properties):
+    def set_multiple_form_properties(self, form_id, form_properties):
         """Add or edit properties of a specific form
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
             form_properties (json): New properties like label width.
 
         Returns:
             Edited properties.
         """
 
-        return self.fetch_url('/form/' + formID + '/properties', form_properties, 'PUT')
+        return self.fetch_url('/form/' + form_id + '/properties', form_properties, 'PUT')
 
     def create_form(self, form):
         """ Create a new form
@@ -601,15 +580,15 @@ class JotformAPIClient:
 
         params = {}
 
-        for key in form.keys():
+        for key in form:
             value = form[key]
-            for k in value.keys():
+            for k in value:
                 if (key == 'properties'):
-                    for k in value.keys():
+                    for k in value:
                         params[key + '[' + k + ']'] = value[k]
                 else:
                     v = value[k]
-                    for a in v.keys():
+                    for a in v:
                         params[key + '[' + k + '][' + a + ']'] =v[a]
 
         return self.fetch_url('/user/forms', params, 'POST')
@@ -626,17 +605,17 @@ class JotformAPIClient:
 
         return self.fetch_url('/user/forms', form, 'PUT')
 
-    def delete_form(self, formID):
+    def delete_form(self, form_id):
         """Delete a specific form
 
         Args:
-            formID (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
+            form_id (string): Form ID is the numbers you see on a form URL. You can get form IDs when you call /user/forms.
 
         Returns:
             Properties of deleted form.
         """
 
-        return self.fetch_url('/form/' + formID, None, 'DELETE')
+        return self.fetch_url('/form/' + form_id, None, 'DELETE')
 
     def register_user(self, userDetails):
         """Register with username, password and email
@@ -668,7 +647,7 @@ class JotformAPIClient:
         Returns:
             Status of request
         """
-        
+
         return self.fetch_url('/user/logout', method='GET')
 
     def get_plan(self, plan_name):

@@ -1,0 +1,62 @@
+*.py[cod]
+
+# C extensions
+*.so
+
+# Packages
+*.egg
+*.egg-info
+
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+lib64
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+tagsite.tests/**
+nosetests.xml
+.log
+
+# Translations
+*.mo
+
+# Mr Developer
+.mr.developer.cfg
+.project
+.pydevproject
+
+# Complexity
+output/*.html
+output/*/index.html
+
+# Sphinx
+docs/_build
+
+.webassets-cache
+
+# Virtualenvs
+env/
+
+# Environment variables
+.env
+.DS_Store
+.idea
+.cache
+staging.env
+/tagsite/assets/libs/bower_components/moment/src/lib
+/tagsite.tests.functional.test_login_register/test_alert_on_logout-session_browser.html
+/tagsite.tests.functional.test_login_register/test_alert_on_logout-browser.html
+/tagsite.tests.functional.test_login_register/test_login_returns_200-session_browser.png
+/tagsite.tests.functional.test_login_register/test_login_returns_200-session_browser.html
+/tagsite.tests.functional.test_login_register/test_alert_on_logout-session_browser.png
+/tagsite.tests.functional.test_login_register/test_alert_on_logout-browser.png
+*.log

@@ -7,5 +7,9 @@ setup(
     description='JotForm API - Python Client',
     author='JotForm',
     author_email='api@jotform.com',
-    py_modules=['jotform']
+    py_modules=['jotform'],
+    install_requires=[
+        'requests',
+        'lxml'
+    ]
 )
