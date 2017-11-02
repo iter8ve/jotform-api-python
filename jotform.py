@@ -13,10 +13,24 @@ import requests
 import json
 import logging
 import pathlib
+import arrow
 
 
-logger = logging.getLogger('spam_application')
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+class ArrowJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            if isinstance(obj, arrow.Arrow):
+                return obj.format('YYYY-MM-DD HH:mm:ss ZZ')
+            iterable = iter(obj)
+        except TypeError:
+            pass
+        else:
+            return list(iterable)
+        return JSONEncoder.default(self, obj)
 
 
 class JotformAPIClient(object):
@@ -52,7 +66,7 @@ class JotformAPIClient(object):
         return json_response.get('content')
 
     @staticmethod
-    def create_conditions(offset, limit, filters, order_by):
+    def create_conditions(offset, limit, order_by, **filters):
 
         kwargs = {
             'offset': offset,
@@ -63,7 +77,7 @@ class JotformAPIClient(object):
         params = {k: v for k, v in kwargs.items() if k}
 
         if filters:
-            params.update({'filter': json.dumps(filters)})
+            params.update({'filter': json.dumps(filters, cls=ArrowJSONEncoder)})
 
         return params
 
@@ -99,7 +113,7 @@ class JotformAPIClient(object):
 
         return self.fetch_url('/user/usage', method='GET')
 
-    def get_forms(self, offset=None, limit=None, filters=None, order_by=None):
+    def get_forms(self, offset=None, limit=None, order_by=None, **filters):
         """Get a list of forms for this account
 
         Args:
@@ -112,24 +126,24 @@ class JotformAPIClient(object):
             Basic details such as title of the form, when it was created, number of new and total submissions.
         """
 
-        params = self.create_conditions(offset, limit, filters, order_by)
+        params = self.create_conditions(offset, limit, order_by, **filters)
 
         return self.fetch_url('/user/forms', params, 'GET')
 
-    def get_submissions(self, offset=None, limit=None, filters=None, order_by=None):
+    def get_submissions(self, offset=None, limit=None, order_by=None, **filters):
         """Get a list of submissions for this account.
 
         Args:
             offset (string): Start of each result set for form list. (optional)
             limit (string): Number of results in each result set for form list. (optional)
-            filters (array): Filters the query results to fetch a specific form range.(optional)
             order_by (string): Order results by a form field name. (optional)
+            filters (array): Filters the query results to fetch a specific form range.(optional)
 
         Returns:
             Basic details such as title of the form, when it was created, number of new and total submissions.
         """
 
-        params = self.create_conditions(offset, limit, filters, order_by)
+        params = self.create_conditions(offset, limit, order_by, **filters)
 
         return self.fetch_url('/user/submissions', params, 'GET')
 
@@ -237,7 +251,7 @@ class JotformAPIClient(object):
         return self.fetch_url('/form/' + id + '/question/' + qid, method='GET')
 
     def get_form_submissions(self, id, offset=None, limit=None,
-                             filters=None, order_by=None):
+                             order_by=None, **filters):
         """List of a form submissions.
 
         Args:
@@ -251,7 +265,7 @@ class JotformAPIClient(object):
             Submissions of a specific form.
         """
 
-        params = self.create_conditions(offset, limit, filters, order_by)
+        params = self.create_conditions(offset, limit, order_by, **filters)
 
         return self.fetch_url('/form/' + id + '/submissions', params, 'GET')
 
